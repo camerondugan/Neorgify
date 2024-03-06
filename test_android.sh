@@ -1,5 +1,2 @@
 #!/usr/bin/env bash
-
-gogio -target android neorgify
-adb uninstall localhost.neorgify
-adb install neorgify.apk
+fyne package -os android -appID com.camerondugan.Neorgify && fyne install -os android -appID com.camerondugan.Neorgify
