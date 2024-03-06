@@ -3,6 +3,6 @@ Website = "https://camerondugan.com"
 [Details]
   Icon = "Icon.png"
   Name = "Neorgify"
-  ID = "com.camerondugan.Neorgify"
+  ID = "com.camerondugan.neorgify"
   Version = "1.0.0"
-  Build = 4
+  Build = 20

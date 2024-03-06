@@ -1,62 +1,79 @@
 package main
 
 import (
-	"errors"
+	"fmt"
 	"log"
 	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
-	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/widget"
 )
 
-func homeContent(window fyne.Window) fyne.CanvasObject {
-	notesFolder := binding.NewString()
-	notesFolder.Set("None Selected")
-	onChoice := func(folderSelected fyne.ListableURI, err error) {
-		if err != nil {
-			errDialog := dialog.NewError(err, window)
-			errDialog.Show()
+var homeFiles binding.StringList
+var homeWindow fyne.Window
+
+func homeContent(w fyne.Window) fyne.CanvasObject {
+	homeFiles = binding.NewStringList()
+	homeFiles.Append("Can't scan folder")
+	homeFiles.Append("Go set a folder")
+	homeWindow = w
+	go func() {
+		for {
+			updateFiles()
+			time.Sleep(30 * time.Second)
 		}
-		if folderSelected != nil {
-			log.Println("folder selected")
-			log.Println(folderSelected.Name())
-			validateFolder(folderSelected, window)
-			notesFolder.Set(folderSelected.Path())
-		} else {
-			log.Println("no folder selected")
-		}
-	}
-	folderDialog := dialog.NewFolderOpen(onChoice, window)
-	onButton := func() {
-		folderDialog.Show()
-	}
-	button := widget.NewButton("click me", onButton)
-	folderLabel := widget.NewLabelWithData(notesFolder)
-	return container.NewVBox(folderLabel, button)
+	}()
+
+	scroller := container.NewScroll(
+		widget.NewListWithData(homeFiles,
+			func() fyne.CanvasObject {
+				return widget.NewLabel("template")
+			},
+			func(di binding.DataItem, co fyne.CanvasObject) {
+				co.(*widget.Label).Bind(di.(binding.String))
+			},
+		),
+	)
+	scroller.Direction = container.ScrollVerticalOnly
+
+	return scroller
 }
 
-// warns user of issues
-func validateFolder(folderSelected fyne.ListableURI, window fyne.Window) {
-	canRead, err := storage.CanRead(folderSelected)
-	if err != nil {
-		errDialog := dialog.NewError(err, window)
-		errDialog.Show()
+func updateFiles() {
+	if !pickedFolder && fyne.CurrentDevice().IsMobile() {
+		return
 	}
+	homeFiles.Set([]string{})
+	folder := fyne.CurrentApp().Preferences().StringWithFallback("NotesFolder", "")
+	if folder == "" {
+		time.Sleep(time.Second * 30)
+		return
+	}
+
+	log.Println(folder)
+	uriFolder, err := storage.ParseURI(folder)
+	check(err)
+	canRead, err := storage.CanRead(uriFolder)
+	check(err)
 	if !canRead {
-		errDialog := dialog.NewError(errors.New("I can't read this folder! :<"), window)
-		errDialog.Show()
+		fyne.CurrentApp().SendNotification(fyne.NewNotification("can't read folder", ""))
+		return
+	}
+	canList, err := storage.CanList(uriFolder)
+	check(err)
+
+	if !canList {
+		fmt.Println("Can't list")
+		return
 	}
 
-}
+	entries, err := storage.List(uriFolder)
+	check(err)
 
-func notifyTest(a fyne.App) {
-	notif := fyne.Notification{Title: "Notification", Content: "content"}
-	for {
-		a.SendNotification(&notif)
-		time.Sleep(1 * time.Second)
+	for _, entry := range entries {
+		homeFiles.Append(entry.Name())
 	}
 }
