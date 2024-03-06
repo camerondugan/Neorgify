@@ -28,7 +28,7 @@ func settingsContent(window fyne.Window) fyne.CanvasObject {
 			validateFolder(folderSelected, window)
 			a.Preferences().SetString("NotesFolder", folderSelected.String())
 			notesFolder.Set(folderSelected.String())
-			shouldScanFiles = true
+			pickedFolder = true
 			updateFiles()
 		} else {
 			log.Println("no folder selected")
