@@ -29,7 +29,7 @@ func settingsContent(window fyne.Window) fyne.CanvasObject {
 			a.Preferences().SetString("NotesFolder", folderSelected.String())
 			notesFolder.Set(folderSelected.String())
 			pickedFolder = true
-			updateFiles()
+			go updateFiles()
 		} else {
 			log.Println("no folder selected")
 		}

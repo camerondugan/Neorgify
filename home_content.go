@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"time"
 
@@ -17,8 +16,9 @@ var homeWindow fyne.Window
 
 func homeContent(w fyne.Window) fyne.CanvasObject {
 	homeFiles = binding.NewStringList()
-	homeFiles.Append("Can't scan folder")
-	homeFiles.Append("Go set a folder")
+
+	setMessage()
+
 	homeWindow = w
 	go func() {
 		for {
@@ -27,19 +27,30 @@ func homeContent(w fyne.Window) fyne.CanvasObject {
 		}
 	}()
 
-	scroller := container.NewScroll(
-		widget.NewListWithData(homeFiles,
-			func() fyne.CanvasObject {
-				return widget.NewLabel("template")
-			},
-			func(di binding.DataItem, co fyne.CanvasObject) {
-				co.(*widget.Label).Bind(di.(binding.String))
-			},
-		),
+	itemList := widget.NewListWithData(homeFiles,
+		func() fyne.CanvasObject {
+			return widget.NewLabel("template")
+		},
+		func(di binding.DataItem, co fyne.CanvasObject) {
+			co.(*widget.Label).Bind(di.(binding.String))
+		},
 	)
+	scroller := container.NewScroll(itemList)
 	scroller.Direction = container.ScrollVerticalOnly
 
 	return scroller
+}
+
+// for when we can't scan folder
+func setMessage() {
+	homeFiles.Append("Can't scan folder")
+	if fyne.CurrentApp().Preferences().StringWithFallback("NotesFolder", "") == "" {
+		homeFiles.Append("No folder set")
+	} else if fyne.CurrentDevice().IsMobile() {
+		homeFiles.Append("Must give permission every time")
+	} else {
+		homeFiles.Append("Unknown Reason")
+	}
 }
 
 func updateFiles() {
@@ -52,28 +63,38 @@ func updateFiles() {
 		time.Sleep(time.Second * 30)
 		return
 	}
-
 	log.Println(folder)
 	uriFolder, err := storage.ParseURI(folder)
 	check(err)
+	searchFolder(uriFolder)
+}
+
+func searchFolder(uriFolder fyne.URI) {
 	canRead, err := storage.CanRead(uriFolder)
 	check(err)
 	if !canRead {
 		fyne.CurrentApp().SendNotification(fyne.NewNotification("can't read folder", ""))
 		return
 	}
-	canList, err := storage.CanList(uriFolder)
-	check(err)
 
-	if !canList {
-		fmt.Println("Can't list")
+	isFolder, err := storage.CanList(uriFolder)
+	check(err)
+	if !isFolder {
 		return
 	}
 
 	entries, err := storage.List(uriFolder)
 	check(err)
 
+	acceptableEndings := []string{".norg", ".md", ".txt", ".org"}
+	filter := storage.NewExtensionFileFilter(acceptableEndings)
 	for _, entry := range entries {
-		homeFiles.Append(entry.Name())
+		if filter.Matches(entry) {
+			homeFiles.Append(entry.String())
+		}
+		check(err)
+		if !fyne.CurrentDevice().IsMobile() {
+			searchFolder(entry)
+		}
 	}
 }
