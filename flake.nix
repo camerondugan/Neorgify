@@ -39,14 +39,14 @@
                   jdk17
                   clang
                 ] ++ (if stdenv.isLinux then [
-                  vulkan-headers
-                  libxkbcommon
-                  wayland
-                  xorg.libX11
-                  xorg.libXcursor
-                  xorg.libXfixes
-                  libGL
                   pkg-config
+                  libGL
+                  xorg.libX11.dev
+                  xorg.libXcursor
+                  xorg.libXi
+                  xorg.libXinerama
+                  xorg.libXrandr
+                  xorg.libXxf86vm
                 ] else if stdenv.isDarwin then [
                   darwin.apple_sdk_11_0.frameworks.Foundation
                   darwin.apple_sdk_11_0.frameworks.Metal
@@ -55,7 +55,7 @@
                   darwin.apple_sdk_11_0.MacOSX-SDK
                 ] else [ ]);
               } // (if stdenv.isLinux then {
-                LD_LIBRARY_PATH = "${vulkan-loader}/lib";
+                LD_LIBRARY_PATH = "${vulkan-loader}/lib:${xorg.xrandr}/lib:";
               } else { }));
           }
         );
