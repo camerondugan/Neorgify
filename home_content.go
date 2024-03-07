@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -9,13 +11,14 @@ import (
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/widget"
+	"github.com/markusmobius/go-dateparser"
 )
 
-var homeFiles binding.StringList
+var tasksWithDates binding.StringList
 var homeWindow fyne.Window
 
 func homeContent(w fyne.Window) fyne.CanvasObject {
-	homeFiles = binding.NewStringList()
+	tasksWithDates = binding.NewStringList()
 
 	setMessage()
 
@@ -27,7 +30,7 @@ func homeContent(w fyne.Window) fyne.CanvasObject {
 		}
 	}()
 
-	itemList := widget.NewListWithData(homeFiles,
+	itemList := widget.NewListWithData(tasksWithDates,
 		func() fyne.CanvasObject {
 			return widget.NewLabel("template")
 		},
@@ -43,13 +46,13 @@ func homeContent(w fyne.Window) fyne.CanvasObject {
 
 // for when we can't scan folder
 func setMessage() {
-	homeFiles.Append("Can't scan folder")
+	tasksWithDates.Append("Can't scan folder")
 	if fyne.CurrentApp().Preferences().StringWithFallback("NotesFolder", "") == "" {
-		homeFiles.Append("No folder set")
+		tasksWithDates.Append("No folder set")
 	} else if fyne.CurrentDevice().IsMobile() {
-		homeFiles.Append("Must give permission every time")
+		tasksWithDates.Append("Must give permission every time")
 	} else {
-		homeFiles.Append("Unknown Reason")
+		tasksWithDates.Append("Unknown Reason")
 	}
 }
 
@@ -57,7 +60,7 @@ func updateFiles() {
 	if !pickedFolder && fyne.CurrentDevice().IsMobile() {
 		return
 	}
-	homeFiles.Set([]string{})
+	tasksWithDates.Set([]string{})
 	folder := fyne.CurrentApp().Preferences().StringWithFallback("NotesFolder", "")
 	if folder == "" {
 		time.Sleep(time.Second * 30)
@@ -66,7 +69,7 @@ func updateFiles() {
 	log.Println(folder)
 	uriFolder, err := storage.ParseURI(folder)
 	check(err)
-	searchFolder(uriFolder)
+	go searchFolder(uriFolder)
 }
 
 func searchFolder(uriFolder fyne.URI) {
@@ -90,11 +93,48 @@ func searchFolder(uriFolder fyne.URI) {
 	filter := storage.NewExtensionFileFilter(acceptableEndings)
 	for _, entry := range entries {
 		if filter.Matches(entry) {
-			homeFiles.Append(entry.String())
+			readFile(entry)
 		}
 		check(err)
 		if !fyne.CurrentDevice().IsMobile() {
-			searchFolder(entry)
+			go searchFolder(entry)
+		}
+	}
+}
+
+func readFile(entry fyne.URI) {
+	builder := strings.Builder{}
+	taskPrefixes := []string{"- ( )"}
+	parseConfig := &dateparser.Configuration{
+		CurrentTime:         time.Now(),
+		PreferredDayOfMonth: dateparser.First,
+		PreferredDateSource: dateparser.Future,
+	}
+	// files
+	closer, err := storage.Reader(entry)
+	check(err)
+	builder.Reset()
+	buffer := make([]byte, 10000)
+	var i = 1
+	for i > 0 {
+		i, _ = closer.Read(buffer)
+		builder.Write(buffer)
+	}
+	for _, line := range strings.Split(builder.String(), "\n") {
+		line := strings.Trim(line, " ")
+		if len(line) == 0 {
+			continue
+		}
+		for _, prefix := range taskPrefixes {
+			if strings.HasPrefix(line, prefix) {
+				line := line[len(prefix):]
+				fmt.Printf("line: %v\n", line)
+				_, dates, _ := dateparser.Search(parseConfig, line)
+				if len(dates) > 0 {
+					date := dates[len(dates)-1]
+					tasksWithDates.Append(date.Date.Time.Format("Jan 2, 2006 at 3:04pm ") + line)
+				}
+			}
 		}
 	}
 }
