@@ -1,126 +1,139 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
+	"crypto/sha256"
 	"fmt"
+	"io/fs"
 	"log"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
-	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/data/binding"
-	"fyne.io/fyne/v2/storage"
-	"fyne.io/fyne/v2/widget"
 	"github.com/markusmobius/go-dateparser"
 )
 
-var tasksWithDates binding.StringList
-var homeWindow fyne.Window
-
-func homeContent(w fyne.Window) fyne.CanvasObject {
-	tasksWithDates = binding.NewStringList()
-
-	setMessage()
-
-	homeWindow = w
-	go func() {
-		for {
-			updateFiles()
-			time.Sleep(30 * time.Second)
-		}
-	}()
-
-	itemList := widget.NewListWithData(tasksWithDates,
-		func() fyne.CanvasObject {
-			return widget.NewLabel("template")
-		},
-		func(di binding.DataItem, co fyne.CanvasObject) {
-			co.(*widget.Label).Bind(di.(binding.String))
-		},
-	)
-	scroller := container.NewScroll(itemList)
-	scroller.Direction = container.ScrollVerticalOnly
-
-	return scroller
+func searchFolder(folder string) {
+	err := filepath.WalkDir(folder, walkDir)
+	check(err)
 }
 
-// for when we can't scan folder
-func setMessage() {
-	tasksWithDates.Append("Can't scan folder")
-	if fyne.CurrentApp().Preferences().StringWithFallback("NotesFolder", "") == "" {
-		tasksWithDates.Append("No folder set")
-	} else if fyne.CurrentDevice().IsMobile() {
-		tasksWithDates.Append("Must give permission every time")
-	} else {
-		tasksWithDates.Append("Unknown Reason")
+func walkDir(path string, entry fs.DirEntry, err error) error {
+	if err != nil {
+		return err
 	}
-}
-
-func updateFiles() {
-	if !pickedFolder && fyne.CurrentDevice().IsMobile() {
-		return
+	if entry.IsDir() {
+		return nil
 	}
-	tasksWithDates.Set([]string{})
-	folder := fyne.CurrentApp().Preferences().StringWithFallback("NotesFolder", "")
-	if folder == "" {
-		time.Sleep(time.Second * 30)
-		return
-	}
-	log.Println(folder)
-	uriFolder, err := storage.ParseURI(folder)
-	check(err)
-	go searchFolder(uriFolder)
-}
-
-func searchFolder(uriFolder fyne.URI) {
-	canRead, err := storage.CanRead(uriFolder)
-	check(err)
-	if !canRead {
-		fyne.CurrentApp().SendNotification(fyne.NewNotification("can't read folder", ""))
-		return
-	}
-
-	isFolder, err := storage.CanList(uriFolder)
-	check(err)
-	if !isFolder {
-		return
-	}
-
-	entries, err := storage.List(uriFolder)
-	check(err)
-
 	acceptableEndings := []string{".norg", ".md", ".txt", ".org"}
-	filter := storage.NewExtensionFileFilter(acceptableEndings)
-	for _, entry := range entries {
-		if filter.Matches(entry) {
-			readFile(entry)
+	// detect if has acceptableEnding
+	acceptable := false
+	for _, ending := range acceptableEndings {
+		if strings.HasSuffix(entry.Name(), ending) {
+			acceptable = true
+			break
 		}
+	}
+	if acceptable {
+		readFile(path)
+	} else if entry.IsDir() {
+		searchFolder(filepath.Join(notesFolder, entry.Name()))
+	}
+	return nil
+}
+
+func readFile(entry string) {
+	filename := filepath.Base(entry)
+	path := filepath.Dir(entry)
+
+	fileBytes, err := os.ReadFile(entry)
+	if !os.IsNotExist(err) {
 		check(err)
-		if !fyne.CurrentDevice().IsMobile() {
-			go searchFolder(entry)
+	}
+
+	h := sha256.Sum256(fileBytes)
+	hash := sanitizeHash(h[:])
+	hashPath := filepath.Join(path, ".neorgify_file_hashes")
+	hashFile, err := os.Open(hashPath)
+	defer hashFile.Close()
+	if os.IsNotExist(err) {
+		// create hash file for this folder
+		fmt.Printf("hashPath: %v\n", hashPath)
+		f, err := os.Create(hashPath)
+		check(err)
+		defer f.Close()
+		f.Write([]byte(filename + ":"))
+		f.Write([]byte(hash))
+		readTasksFromFile(fileBytes)
+		return
+	}
+
+	// hash file exists in this folder
+	scanner := bufio.NewScanner(hashFile)
+	var validLines []byte
+	saveBuffer := bytes.NewBuffer(validLines)
+	found := false
+	for i := 0; scanner.Scan(); i++ {
+		if len(scanner.Text()) == 0 {
+			continue // remove empty lines
 		}
+		colonIndex := strings.IndexRune(scanner.Text(), ':')
+		if colonIndex == -1 || len(scanner.Text()) == colonIndex {
+			continue //remove invalid lines
+		}
+		storedHash := scanner.Text()[colonIndex+1:]
+		if len(storedHash) != 32 { // invalid hash
+			continue //remove invalid lines
+		}
+		hashedFileName := scanner.Text()[:colonIndex]
+		if hashedFileName != filename {
+			_, err := saveBuffer.Write(scanner.Bytes()) //save lines that don't match
+			check(err)
+			_, err = saveBuffer.Write([]byte("\n"))
+			check(err)
+			continue
+		}
+		if !slices.Equal([]byte(storedHash), hash) {
+			fmt.Printf("storedHash: %v\n", []byte(storedHash))
+			fmt.Printf("hash:       %v\n", hash)
+			_, err := saveBuffer.Write([]byte(filename + ":")) //save new hash if doesn't match
+			check(err)
+			_, err = saveBuffer.Write([]byte(hash))
+			check(err)
+			_, err = saveBuffer.Write([]byte("\n"))
+			check(err)
+			readTasksFromFile(fileBytes)
+			continue
+		}
+		saveBuffer.Write(scanner.Bytes()) //save line if matches current hash
+		saveBuffer.Write([]byte("\n"))
+		// don't read tasks
+		found = true
+	}
+	if !found {
+		_, err := saveBuffer.Write([]byte(filename + ":")) //append new hash if doesn't exist
+		check(err)
+		_, err = saveBuffer.Write([]byte(hash))
+		check(err)
+		readTasksFromFile(fileBytes)
+	}
+	if !slices.Equal(saveBuffer.Bytes(), fileBytes) {
+		err := os.WriteFile(hashPath, saveBuffer.Bytes(), 0666)
+		check(err)
 	}
 }
 
-func readFile(entry fyne.URI) {
-	builder := strings.Builder{}
+func readTasksFromFile(fileBytes []byte) {
 	taskPrefixes := []string{"- ( )"}
 	parseConfig := &dateparser.Configuration{
 		CurrentTime:         time.Now(),
 		PreferredDayOfMonth: dateparser.First,
 		PreferredDateSource: dateparser.Future,
 	}
-	// files
-	closer, err := storage.Reader(entry)
-	check(err)
-	builder.Reset()
-	buffer := make([]byte, 10000)
-	var i = 1
-	for i > 0 {
-		i, _ = closer.Read(buffer)
-		builder.Write(buffer)
-	}
-	for _, line := range strings.Split(builder.String(), "\n") {
+	for _, line := range strings.Split(string(fileBytes), "\n") {
 		line := strings.Trim(line, " ")
 		if len(line) == 0 {
 			continue
@@ -128,11 +141,10 @@ func readFile(entry fyne.URI) {
 		for _, prefix := range taskPrefixes {
 			if strings.HasPrefix(line, prefix) {
 				line := line[len(prefix):]
-				fmt.Printf("line: %v\n", line)
 				_, dates, _ := dateparser.Search(parseConfig, line)
 				if len(dates) > 0 {
 					date := dates[len(dates)-1]
-					tasksWithDates.Append(date.Date.Time.Format("Jan 2, 2006 at 3:04pm ") + line)
+					log.Println(date.Date.Time.Format("Jan 2, 2006 at 3:04pm ") + line)
 				}
 			}
 		}
