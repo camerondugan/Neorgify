@@ -17,7 +17,7 @@ var reminders []reminder
 var parseConfig *dateparser.Configuration
 
 func main() {
-	notesFolder = "/home/cam/Notes"
+	notesFolder = getSettings("folder")
 	startup = true
 	reminders = []reminder{}
 	parseConfig = &dateparser.Configuration{
@@ -29,7 +29,7 @@ func main() {
 		updateFiles()
 		checkReminders()
 		startup = false
-		time.Sleep(time.Second)
+		time.Sleep(time.Minute)
 	}
 }
 
@@ -41,16 +41,18 @@ func updateFiles() {
 
 func checkReminders() {
 	curTime := time.Now()
-	for _, reminder := range reminders {
-		if reminder.time.After(curTime) && !startup {
-			//https://docs.ntfy.sh/publish/?h=user#username-password
-			server := getSettings("server")
-			req, err := http.NewRequest("POST", string(server), strings.NewReader(reminder.msg))
-			check(err)
-			secret := getSettings("login")
-			req.Header.Set("Authorization", "Basic "+string(secret))
-			http.DefaultClient.Do(req)
-			fmt.Println("sent: " + reminder.msg)
+	if !startup {
+		for _, reminder := range reminders {
+			if reminder.time.After(curTime) {
+				//https://docs.ntfy.sh/publish/?h=user#username-password
+				server := getSettings("server")
+				req, err := http.NewRequest("POST", string(server), strings.NewReader(reminder.msg))
+				check(err)
+				secret := getSettings("login")
+				req.Header.Set("Authorization", "Basic "+string(secret))
+				http.DefaultClient.Do(req)
+				fmt.Println("sent: " + reminder.msg)
+			}
 		}
 	}
 	// remove reminders we sent

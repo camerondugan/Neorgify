@@ -23,6 +23,7 @@ Files must contain just one line.
 Files:
 - server: https://ntfy.yourwebsite.com/YourNtfy.shTopic
 - login: base64 hash of \<ntfy-username\>:\<password\>
+- folder: full path to your folder, example: /home/username/Notes
 
 you can create the login file with this bash script:
 ```bash
