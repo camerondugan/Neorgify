@@ -25,11 +25,17 @@ func main() {
 		PreferredDateSource: dateparser.Future,
 		Languages:           []string{"en"},
 	}
+	// go func() {
+	// 	for {
+	// 		time.Sleep(10 * time.Second)
+	// 	}
+	// }()
 	for {
+		checkReminders()
 		updateFiles()
 		checkReminders()
 		startup = false
-		time.Sleep(time.Minute)
+		time.Sleep(10 * time.Second)
 	}
 }
 
