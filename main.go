@@ -63,7 +63,7 @@ func checkReminders() {
 	}
 	// remove reminders we sent
 	reminders = slices.DeleteFunc(reminders, func(r reminder) bool {
-		return r.time.After(curTime)
+		return curTime.After(r.time)
 	})
 }
 
