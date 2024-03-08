@@ -49,7 +49,7 @@ func checkReminders() {
 	curTime := time.Now()
 	if !startup {
 		for _, reminder := range reminders {
-			if reminder.time.After(curTime) {
+			if curTime.After(reminder.time) {
 				//https://docs.ntfy.sh/publish/?h=user#username-password
 				server := getSettings("server")
 				req, err := http.NewRequest("POST", string(server), strings.NewReader(reminder.msg))
