@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM golang:latest
+FROM golang:latest AS build-stage
 
 WORKDIR /
 
@@ -8,15 +8,20 @@ WORKDIR /
 COPY go.mod go.sum ./
 RUN go mod download
 
+RUN mkdir ./Folder
+
 # Neorgify src
 COPY *.go ./
 RUN CGO_ENABLED=0 GOOS=linux go build
 
-# Neorgify Config
-COPY server ./
-COPY login ./
-COPY dockerfolder ./folder
+FROM gcr.io/distroless/base-debian11 AS build-release-stage
 
-RUN mkdir ./Folder
+WORKDIR /
+
+COPY --from=build-stage /Neorgify /Neorgify
+COPY --from=build-stage /Folder /Folder
+
+# Neorgify Config
+COPY dockerfolder ./folder
 
 CMD ["/Neorgify"]

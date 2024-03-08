@@ -21,7 +21,7 @@ Neorgify searches for files within the folder that it is running in for a couple
 Files must contain just one line.
 
 Files:
-- server: https://ntfy.yourwebsite.com/YourNtfy.shTopic
+- server: https://\<your-url>/\<your-ntfy.sh-topic>
 - login: base64 hash of \<ntfy-username\>:\<password\>
 - folder: full path to your folder, example: /home/username/Notes
 
