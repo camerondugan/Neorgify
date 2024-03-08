@@ -21,7 +21,7 @@ Neorgify searches for files within the folder that it is running in for a couple
 Files must contain just one line.
 
 Files:
-- server: https://ntfy.yourserver.com/YourNtfy.shTopic
+- server: https://ntfy.yourwebsite.com/YourNtfy.shTopic
 - login: base64 hash of \<ntfy-username\>:\<password\>
 
 you can create the login file with this bash script:
