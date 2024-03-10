@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/sha256"
-	"fmt"
 	"io/fs"
 	"log"
 	"os"
@@ -15,9 +14,10 @@ import (
 	"github.com/markusmobius/go-dateparser"
 )
 
-func searchFolder(folder string) {
+func scanFolder(folder string) {
 	err := filepath.WalkDir(folder, walkDir)
 	check(err)
+	go setupReminders()
 }
 
 func walkDir(path string, entry fs.DirEntry, err error) error {
@@ -38,8 +38,6 @@ func walkDir(path string, entry fs.DirEntry, err error) error {
 	}
 	if acceptable {
 		readFile(path)
-	} else if entry.IsDir() {
-		go searchFolder(filepath.Join(notesFolder, entry.Name()))
 	}
 	return nil
 }
@@ -58,7 +56,7 @@ func readFile(entry string) {
 	hashPath := filepath.Join(path, ".neorgify_file_hashes")
 	hashFile, err := os.Open(hashPath)
 	defer hashFile.Close()
-	if os.IsNotExist(err) || startup { //if no hash or if we just started up: readTasks
+	if os.IsNotExist(err) { //if no hash or if we just started up: readTasks
 		// create hash file for this folder
 		f, err := os.Create(hashPath)
 		check(err)
@@ -95,8 +93,8 @@ func readFile(entry string) {
 			continue
 		}
 		if !slices.Equal([]byte(storedHash), hash) {
-			fmt.Printf("storedHash: %v\n", []byte(storedHash))
-			fmt.Printf("hash:       %v\n", hash)
+			// fmt.Printf("storedHash: %v\n", []byte(storedHash))
+			// fmt.Printf("hash:       %v\n", hash)
 			_, err := saveBuffer.Write([]byte(filename + ":")) //save new hash if doesn't match
 			check(err)
 			_, err = saveBuffer.Write([]byte(hash))
@@ -139,8 +137,9 @@ func readTasksFromFile(fileBytes []byte, path string) {
 				for _, date := range dates {
 					message := strings.Replace(line, date.Text, "", 1)
 					message = filepath.Base(path) + ": " + message
-					reminders = append(reminders, reminder{msg: message, time: date.Date.Time, file: path})
-					log.Println(date.Date.Time.Format("Jan 2, 2006 at 3:04pm ") + line)
+					reminder := reminder{msg: message, time: date.Date.Time.Local(), file: path}
+					reminders = append(reminders, reminder)
+					log.Println(date.Date.Time.Local().Format("Jan 2, 2006 at 3:04pm ") + line)
 				}
 			}
 		}
@@ -148,7 +147,18 @@ func readTasksFromFile(fileBytes []byte, path string) {
 }
 
 func deleteTasksFromMemory(file string) {
-	reminders = slices.DeleteFunc(reminders, func(r reminder) bool {
+	shouldDelete := func(r reminder) bool {
 		return r.file == file
-	})
+	}
+
+	// cancel timers
+	for _, r := range reminders {
+		if shouldDelete(r) {
+			if r.timer != nil && !r.timer.Stop() {
+				<-r.timer.C
+			}
+		}
+	}
+
+	reminders = slices.DeleteFunc(reminders, shouldDelete)
 }

@@ -1,16 +1,8 @@
 package main
 
 import (
-	"time"
-
 	"github.com/charmbracelet/log"
 )
-
-type reminder struct {
-	msg  string
-	time time.Time
-	file string
-}
 
 func sanitizeHash(b []byte) []byte {
 	for i, v := range b {

@@ -2,69 +2,64 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"os"
-	"slices"
 	"strings"
 	"time"
 
 	"github.com/markusmobius/go-dateparser"
 )
 
+type reminder struct {
+	msg string
+
+	timer *time.Timer // controls when notification is sent
+
+	time time.Time // time timer goes off
+	file string
+}
+
 var notesFolder string
-var startup bool
 var reminders []reminder
 var parseConfig *dateparser.Configuration
 
 func main() {
 	notesFolder = getSettings("folder")
-	startup = true
 	reminders = []reminder{}
 	parseConfig = &dateparser.Configuration{
 		CurrentTime:         time.Now(),
 		PreferredDateSource: dateparser.Future,
 		Languages:           []string{"en"},
 	}
-	// go func() {
-	// 	for {
-	// 		time.Sleep(10 * time.Second)
-	// 	}
-	// }()
 	for {
-		checkReminders()
-		updateFiles()
-		checkReminders()
-		startup = false
-		time.Sleep(10 * time.Second)
-	}
-}
-
-func updateFiles() {
-	if notesFolder != "" {
-		searchFolder(notesFolder)
-	}
-}
-
-func checkReminders() {
-	curTime := time.Now()
-	if !startup {
-		for _, reminder := range reminders {
-			if curTime.After(reminder.time) {
-				//https://docs.ntfy.sh/publish/?h=user#username-password
-				server := getSettings("server")
-				req, err := http.NewRequest("POST", string(server), strings.NewReader(reminder.msg))
-				check(err)
-				secret := getSettings("login")
-				req.Header.Set("Authorization", "Basic "+string(secret))
-				http.DefaultClient.Do(req)
-				fmt.Println("sent: " + reminder.msg)
-			}
+		if notesFolder != "" {
+			go scanFolder(notesFolder)
+			time.Sleep(10 * time.Second)
 		}
 	}
-	// remove reminders we sent
-	reminders = slices.DeleteFunc(reminders, func(r reminder) bool {
-		return curTime.After(r.time)
-	})
+}
+
+func setupReminders() {
+	for i := range reminders {
+		if reminders[i].timer == nil && time.Now().Before(reminders[i].time) {
+			fmt.Println("setup a timer for " + reminders[i].msg)
+			reminders[i].timer = time.AfterFunc(reminders[i].time.Local().Sub(time.Now()), func() {
+				sendNtfy(reminders[i])
+			})
+		}
+	}
+}
+
+// https://docs.ntfy.sh/publish/?h=user#username-password
+func sendNtfy(reminder reminder) {
+	server := getSettings("server")
+	req, err := http.NewRequest("POST", string(server), strings.NewReader(reminder.msg))
+	check(err)
+	secret := getSettings("login")
+	req.Header.Set("Authorization", "Basic "+string(secret))
+	http.DefaultClient.Do(req)
+	log.Println("sent: " + reminder.msg)
 }
 
 func getSettings(file string) string {
