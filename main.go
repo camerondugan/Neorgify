@@ -32,11 +32,8 @@ func main() {
 		PreferredDateSource: dateparser.Future,
 		Languages:           []string{"en"},
 	}
-	for {
-		if notesFolder != "" {
-			go scanFolder(notesFolder)
-			time.Sleep(10 * time.Second)
-		}
+	if notesFolder != "" {
+		scanFolder(notesFolder)
 	}
 }
 

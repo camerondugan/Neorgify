@@ -4,6 +4,7 @@ go 1.21.7
 
 require (
 	github.com/charmbracelet/log v0.3.1
+	github.com/fsnotify/fsnotify v1.7.0
 	github.com/markusmobius/go-dateparser v1.2.1
 )
 
