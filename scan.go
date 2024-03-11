@@ -44,6 +44,7 @@ func scanFolder(folder string) {
 			err = watcher.Add(path)
 			check(err)
 		} else { // files
+			// read files on launch
 			readIfAcceptable(path)
 		}
 		return nil
