@@ -12,12 +12,10 @@ import (
 )
 
 type reminder struct {
-	msg string
-
+	msg   string
 	timer *time.Timer // controls when notification is sent
-
-	time time.Time // time timer goes off
-	file string
+	time  time.Time   // time timer goes off
+	file  string
 }
 
 var notesFolder string

@@ -23,7 +23,8 @@ func scanFolder(folder string) {
 					return
 				}
 				log.Println("event:", event)
-				if event.Has(fsnotify.Write) {
+				if event.Has(fsnotify.Write) || event.Has(fsnotify.Chmod) ||
+					event.Has(fsnotify.Create) {
 					//event.name is the file path
 					log.Println("modified file at path:", event.Name)
 					readIfAcceptable(event.Name)
