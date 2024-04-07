@@ -35,25 +35,31 @@ func main() {
 	}
 }
 
-func setupReminders() {
-	for i := range reminders {
-		if reminders[i].timer == nil && time.Now().Before(reminders[i].time) {
-			fmt.Println("setup a timer for " + reminders[i].msg)
-			reminders[i].timer = time.AfterFunc(reminders[i].time.Local().Sub(time.Now()), func() {
-				sendNtfy(reminders[i])
-			})
-		}
+func setupReminder(r reminder) {
+	if r.timer == nil && time.Now().Before(r.time) {
+		whatsHappeningString := "created timer for " + r.msg + " at " + r.time.Format(
+			"1:04PM on Mon 01-02-2006",
+		)
+		fmt.Println(whatsHappeningString)
+		r.timer = time.AfterFunc(time.Until(r.time), func() {
+			sendNtfy(r, "reminders")
+		})
+		// tell user the timer was created
+		notifyTimerCreated := reminder{whatsHappeningString, nil, time.Now(), ""}
+		sendNtfy(notifyTimerCreated, "timers")
 	}
 }
 
 // https://docs.ntfy.sh/publish/?h=user#username-password
-func sendNtfy(reminder reminder) {
+func sendNtfy(reminder reminder, board string) {
 	server := getSettings("server")
+	server += "/" + board
 	req, err := http.NewRequest("POST", string(server), strings.NewReader(reminder.msg))
 	check(err)
 	secret := getSettings("login")
 	req.Header.Set("Authorization", "Basic "+string(secret))
-	http.DefaultClient.Do(req)
+	_, err = http.DefaultClient.Do(req)
+	check(err)
 	log.Println("sent: " + reminder.msg)
 }
 
